@@ -1,0 +1,10 @@
+# created by virtualenv automatically
+lib
+bin
+pyvenv.cfg
+.vscode
+__pycache__
+.pylintrc
+app.db
+test.db
+.pytest_cache
