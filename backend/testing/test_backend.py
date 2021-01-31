@@ -5,7 +5,7 @@ import pytest
 
 from backend import get_db
 from backend.app import app
-from backend.database.config import Base, SessionLocal
+from backend.database.config import Base
 from backend.models.user import User
 
 
@@ -50,6 +50,7 @@ def test_create_user(db):
     assert user_in_db.id == user_json["id"]
     
 
+# -------- Transaction tests ---------------
 def test_negative_transaction_affects_oldest(db):
     user = client.post("/users/", json={"name": "Hung", "email":"hung@mail.com"}).json()
 
@@ -131,6 +132,33 @@ def test_negative_transaction_only_affects_payer(db):
     assert transactions[1]["used_points"] == 0
 
 
+def test_invalid_transaction_with_negative_points(db):
+    user = client.post("/users/", json={"name": "Hung", "email":"hung@mail.com"}).json()
+    new_transactions = [
+        {
+            "payer": "DANNON",
+            "points": 300,
+        },
+        {
+            "payer": "COORS",
+            "points": 200,
+        },
+        {
+            "payer": "DANNON",
+            "points": -600,
+        }
+    ]
+    for t in new_transactions:
+        res = client.post(f"/transactions/{user['id']}", json=t)
+    
+    transactions = client.get(f"/transactions/{user['id']}").json()
+    
+    # The last POST call fails, and there are only 2 transactions in the db
+    assert res.status_code == 400
+    assert len(transactions) == 2
+
+
+# -------- Deduction and balance tests ---------------
 def test_example_deduct(db):
     user = client.post("/users/", json={"name": "Hung", "email":"hung@mail.com"}).json()
     new_transactions = [

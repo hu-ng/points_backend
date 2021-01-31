@@ -17,10 +17,11 @@ def get_transactions(user_id: str, skip: int = 0, limit: int = 10, db: Session =
     Route to grab all transactions
     """
     db_user = user_crud.get_user(db=db, user_id=user_id)
-    if db_user:
-        return trans_crud.get_transactions(db=db, skip=skip, limit=limit, user_id=user_id)
-    
-    raise HTTPException(status_code=400, detail="User does not exist")
+
+    if not db_user:
+        raise HTTPException(status_code=400, detail="User does not exist")
+        
+    return trans_crud.get_transactions(db=db, skip=skip, limit=limit, user_id=user_id)
 
 
 @router.post("/{user_id}", response_model=TransactionOut)
@@ -32,10 +33,16 @@ def create_transaction(user_id: str, transaction: TransactionIn, db: Session = D
 
     if not db_user:
         raise HTTPException(status_code=400, detail="User does not exist")
+
+    payer_transactions = trans_crud.get_all_active_transactions_of_payer(db=db, user_id=user_id, payer=transaction.payer)
+
+    # If the current balance for this payer is less than amount being subtracted
+    if transaction.points < 0 and sum([t.usable_points for t in payer_transactions]) + transaction.points < 0:
+        raise HTTPException(status_code=400, detail="Invalid transaction with negative points: amount exceeds current balance for this payer")
     
     new_transaction = trans_crud.create_transaction(db=db, transaction=transaction, user_id=user_id)
 
-    # If it has negative points, take off points from the oldest entries of the same payer
+    # If the added transaction has negative points, take off points from the oldest entries of the same payer
     if new_transaction.points < 0:
         # Get all transactions from this payer with positive points
         payer_transactions = trans_crud.get_all_active_transactions_of_payer(db=db, user_id=user_id, payer=new_transaction.payer)
@@ -43,14 +50,17 @@ def create_transaction(user_id: str, transaction: TransactionIn, db: Session = D
 
         # Reduce transactions until to_reduce is 0
         for transaction in payer_transactions:
+            # If can use all points, do so
             if transaction.usable_points >= to_reduce:
                 transaction.used_points += to_reduce
                 break
-            # If usable points < to_reduce
+            # If not, reduce from current transaction and calc what's left
             else:
                 to_use = transaction.usable_points
                 transaction.used_points += to_use
                 to_reduce -= to_use
+
+        # Mark the transaction as used
         new_transaction.used_points = new_transaction.points
 
         db.commit()

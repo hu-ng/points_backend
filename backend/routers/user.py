@@ -62,7 +62,7 @@ def get_points_balance(user_id: str, db: Session = Depends(get_db)):
     balance = defaultdict(int)
 
     for transaction in user_transactions:
-        balance[transaction.payer] += transaction.points - transaction.used_points
+        balance[transaction.payer] += transaction.usable_points
     
     return balance
 
@@ -70,7 +70,7 @@ def get_points_balance(user_id: str, db: Session = Depends(get_db)):
 @router.post("/{user_id}/deduct")
 def deduct_points_from_balance(user_id: str, deduct_amount: int = Query(..., gt=0), db: Session = Depends(get_db)):
     """
-    Deduct points from transactions with unused positive points from oldest to latest
+    Deduct points from transactions with unused positive points, from oldest to latest
     """
     db_user = user_crud.get_user(db=db, user_id=user_id)
 
@@ -79,7 +79,7 @@ def deduct_points_from_balance(user_id: str, deduct_amount: int = Query(..., gt=
     
     response = defaultdict(int)
 
-    # Get all active transactions for this user
+    # Get all applicable transactions for this user
     active_transactions = trans_crud.get_all_active_transactions(db=db, user_id=user_id)
 
     for transaction in active_transactions:
@@ -98,12 +98,13 @@ def deduct_points_from_balance(user_id: str, deduct_amount: int = Query(..., gt=
         
         deduct_amount = amount_left
 
+        # If there's nothing left to deduct, break from loop
         if deduct_amount <= 0:
             break
 
     # If there are still points to reduce, this means user doesn't have enough points
     if deduct_amount > 0:
-        raise HTTPException(status_code=400, detail="This user does not have enough points to deduct")
+        raise HTTPException(status_code=400, detail="The user does not have enough points to deduct this amount")
 
     # Changes were valid, so commit
     db.commit()
