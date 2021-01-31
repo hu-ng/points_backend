@@ -1,11 +1,11 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class TransactionBase(BaseModel):
     payer: str
     points: int
-    transaction_date: datetime = Field(default_factory=datetime.utcnow)
+    transaction_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class TransactionIn(TransactionBase):

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from sqlalchemy.orm import Session
+from datetime import timezone
 
 from backend.crud import transaction as trans_crud
 from backend.crud import user as user_crud
@@ -39,6 +40,14 @@ def create_transaction(user_id: str, transaction: TransactionIn, db: Session = D
     # If the current balance for this payer is less than amount being subtracted
     if transaction.points < 0 and sum([t.usable_points for t in payer_transactions]) + transaction.points < 0:
         raise HTTPException(status_code=400, detail="Invalid transaction with negative points: amount exceeds current balance for this payer")
+    
+    # For this implementation and for simplicity, all new transactions should follow each other chronologically (more in README)
+    if db_user.transactions:
+        # Make the date timezone-aware for comparison
+        last_transaction_time = db_user.transactions[-1].transaction_date
+        last_transaction_time = last_transaction_time.replace(tzinfo=timezone.utc)
+        if transaction.transaction_date < last_transaction_time:
+            raise HTTPException(status_code=400, detail="New transactions must occur after the last recorded transaction")
     
     new_transaction = trans_crud.create_transaction(db=db, transaction=transaction, user_id=user_id)
 

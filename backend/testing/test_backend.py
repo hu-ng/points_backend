@@ -158,6 +158,35 @@ def test_invalid_transaction_with_negative_points(db):
     assert len(transactions) == 2
 
 
+def test_no_retroactive_transaction(db):
+    user = client.post("/users/", json={"name": "Hung", "email":"hung@mail.com"}).json()
+    new_transactions = [
+        {
+            "payer": "DANNON",
+            "points": 300,
+            "transaction_date": "2021-01-30T00:00:00.000Z"
+        },
+        {
+            "payer": "COORS",
+            "points": 200,
+            "transaction_date": "2021-01-31T00:00:00.000Z"
+        },
+        {
+            "payer": "DANNON",
+            "points": 100,
+            "transaction_date": "2021-01-20T00:00:00.000Z"
+        }
+    ]
+    for t in new_transactions:
+        res = client.post(f"/transactions/{user['id']}", json=t)
+
+    transactions = client.get(f"/transactions/{user['id']}").json()
+    
+    # The last POST call fails, and there are only 2 transactions in the db
+    assert res.status_code == 400
+    assert len(transactions) == 2
+    
+
 # -------- Deduction and balance tests ---------------
 def test_example_deduct(db):
     user = client.post("/users/", json={"name": "Hung", "email":"hung@mail.com"}).json()
@@ -320,5 +349,5 @@ def test_deduct_oldest_first(db):
 
     transactions = client.get(f"/transactions/{user['id']}").json()
 
-    assert transactions[0]["used_points"] == 300  # use Dannon's 100 first
+    assert transactions[0]["used_points"] == 300  # use Dannon's 100 first, note that 200 is already applied from the last transaction
     assert transactions[1]["used_points"] == 200  # use Unilever's 200 second
